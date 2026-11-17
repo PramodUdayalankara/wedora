@@ -171,4 +171,5 @@ Supabase Auth handles live sign-in. Administrators are bootstrapped by promoting
 ## 📄 License
 Proprietary software built for **WEDORA Customized Chocolates**, Colombo, Sri Lanka.
 #   W e d o r a  
+ #   w e d o r a  
  
