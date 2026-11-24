@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { orderService, paymentService } from '../services/dataService';
+import { orderService, paymentService, expenseService } from '../services/dataService';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -33,7 +33,10 @@ import {
   Edit,
   Plus,
   Send,
-  Percent
+  Percent,
+  Receipt,
+  TrendingDown,
+  DollarSign
 } from 'lucide-react';
 
 const STATUS_STAGES = ['New', 'Confirmed', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Cancelled'];
@@ -87,6 +90,17 @@ export const OrderDetails = () => {
   const [advancePercent, setAdvancePercent] = useState('50');
   const [advanceCustomAmount, setAdvanceCustomAmount] = useState('');
   const [advanceBankDetails, setAdvanceBankDetails] = useState('');
+
+  // Order-wise Expense Modal
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expTitle, setExpTitle] = useState('');
+  const [expCategory, setExpCategory] = useState('Ingredients & Raw Materials');
+  const [expAmount, setExpAmount] = useState('');
+  const [expVendor, setExpVendor] = useState('');
+  const [expMethod, setExpMethod] = useState('Cash');
+  const [expNotes, setExpNotes] = useState('');
+  const [savingExpense, setSavingExpense] = useState(false);
+  const [deletingExpenseId, setDeletingExpenseId] = useState(null);
 
   const { refreshTrigger, refreshData, settings } = useData();
   const { user, isAdmin } = useAuth();
@@ -248,6 +262,60 @@ export const OrderDetails = () => {
     }
   };
 
+  // Handle Order-wise Expense
+  const handleSaveExpense = async (e) => {
+    e.preventDefault();
+    const parsedAmount = Number(expAmount);
+    if (!parsedAmount || parsedAmount <= 0) {
+      showToast('Please enter a valid expense amount', 'warning');
+      return;
+    }
+    if (!expTitle.trim()) {
+      showToast('Please enter an expense description', 'warning');
+      return;
+    }
+
+    setSavingExpense(true);
+    try {
+      await expenseService.create({
+        order_id: order.id,
+        title: expTitle.trim(),
+        category: expCategory,
+        amount: parsedAmount,
+        expense_date: new Date().toISOString().split('T')[0],
+        payment_method: expMethod,
+        vendor: expVendor.trim(),
+        notes: expNotes.trim() ? `[Order ${order.order_number}] - ${expNotes.trim()}` : `Allocated to Order ${order.order_number}`
+      }, user);
+
+      showToast(`Expense of ${formatCurrency(parsedAmount)} added to this order!`, 'success');
+      setExpenseModalOpen(false);
+      setExpTitle('');
+      setExpAmount('');
+      setExpVendor('');
+      setExpNotes('');
+      refreshData();
+    } catch (err) {
+      showToast(err.message || 'Failed to record expense', 'error');
+    } finally {
+      setSavingExpense(false);
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    if (!window.confirm('Are you sure you want to remove this expense record?')) return;
+    setDeletingExpenseId(expenseId);
+    try {
+      await expenseService.delete(expenseId);
+      showToast('Expense removed', 'success');
+      refreshData();
+    } catch (err) {
+      showToast(err.message || 'Failed to remove expense', 'error');
+    } finally {
+      setDeletingExpenseId(null);
+    }
+  };
+
   // Tracking Handlers
   const handleTrackSlp = (barcode) => {
     setSlpPortalOpen(true);
@@ -280,6 +348,13 @@ export const OrderDetails = () => {
     whatsAppMessage += ` Required delivery date: ${formatDate(order.delivery_date)}. Thank you for choosing WEDORA!`;
   }
   const whatsAppUrl = getWhatsAppUrl(order.customer?.whatsapp || order.customer?.phone, whatsAppMessage);
+
+  // Calculate Order-wise Expenses & Net Profit
+  const totalOrderExpenses = (order.expenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const netOrderProfit = Number(order.total_amount || 0) - totalOrderExpenses;
+  const profitMargin = Number(order.total_amount || 0) > 0
+    ? Math.round((netOrderProfit / Number(order.total_amount)) * 100)
+    : 0;
 
   return (
     <div className="animate-fade-in">
@@ -518,6 +593,37 @@ export const OrderDetails = () => {
             </div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700, color: Number(order.balance_due) > 0 ? '#F87171' : '#10B981' }}>
               {formatCurrency(order.balance_due)}
+            </div>
+          </div>
+
+          {/* Order-wise Net Profit */}
+          <div
+            onClick={() => {
+              const el = document.getElementById('order-expenses-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            title="Click to view and add order-wise expenses"
+            style={{
+              cursor: 'pointer',
+              padding: '0.4rem 0.6rem',
+              borderRadius: 'var(--radius-md)',
+              transition: 'background-color 0.15s ease',
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: netOrderProfit >= 0 ? '1px dashed rgba(52, 211, 153, 0.5)' : '1px dashed rgba(248, 113, 113, 0.5)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: netOrderProfit >= 0 ? '#A7F3D0' : '#FECACA', fontWeight: 700 }}>
+                Net Profit
+              </span>
+              <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.35rem', borderRadius: '4px', backgroundColor: netOrderProfit >= 0 ? 'rgba(5, 150, 105, 0.3)' : 'rgba(220, 38, 38, 0.3)', color: '#FFF' }}>
+                {profitMargin}%
+              </span>
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: netOrderProfit >= 0 ? '#34D399' : '#F87171' }}>
+              {formatCurrency(netOrderProfit)}
             </div>
           </div>
         </div>
@@ -761,6 +867,160 @@ export const OrderDetails = () => {
             </CardBody>
           </Card>
         </div>
+      </div>
+
+      {/* Order-wise Expenses & Profit Analysis Section */}
+      <div id="order-expenses-section" style={{ marginBottom: '1.5rem' }}>
+        <Card>
+          <CardHeader
+            title="Order-wise Expenses & Net Profit Analysis"
+            subtitle={`Dedicated operational expenses allocated directly to Order ${order.order_number}`}
+            action={
+              <Button
+                variant="gold"
+                size="sm"
+                icon={Plus}
+                onClick={() => setExpenseModalOpen(true)}
+              >
+                Add Order Expense
+              </Button>
+            }
+          />
+          <CardBody style={{ padding: 0 }}>
+            {/* Profit & Expense Metrics Row */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1rem',
+              padding: '1.25rem 1.5rem',
+              backgroundColor: 'var(--bg-hover)',
+              borderBottom: '1px solid var(--border-subtle)'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Order Revenue (Sales)
+                </span>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+                  {formatCurrency(order.total_amount)}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Order Expenses (Costs)
+                </span>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#DC2626' }}>
+                  {formatCurrency(totalOrderExpenses)}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Net Order Profit
+                </span>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: netOrderProfit >= 0 ? '#059669' : '#DC2626' }}>
+                  {formatCurrency(netOrderProfit)}
+                </div>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Profit Margin
+                </span>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: profitMargin >= 30 ? '#059669' : (profitMargin > 0 ? '#D97706' : '#DC2626') }}>
+                  {profitMargin}%
+                </div>
+              </div>
+            </div>
+
+            {/* Expenses Table */}
+            {(!order.expenses || order.expenses.length === 0) ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <Receipt size={24} style={{ margin: '0 auto 0.5rem', opacity: 0.5, display: 'block' }} />
+                No dedicated expenses recorded for this order yet.
+                <div style={{ marginTop: '0.5rem' }}>
+                  <button
+                    onClick={() => setExpenseModalOpen(true)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--gold-600)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    + Add first expense (ingredients, packaging, delivery)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Expense Item</th>
+                      <th>Category</th>
+                      <th>Date</th>
+                      <th>Paid Via</th>
+                      <th>Vendor / Notes</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
+                      <th style={{ textAlign: 'center', width: '60px' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.expenses.map((exp) => (
+                      <tr key={exp.id}>
+                        <td style={{ fontWeight: 600, color: 'var(--navy-900)' }}>
+                          <div>{exp.title}</div>
+                          {exp.expense_number && (
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                              {exp.expense_number}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge badge-gold" style={{ fontSize: '0.7rem' }}>
+                            {exp.category}
+                          </span>
+                        </td>
+                        <td>{formatDate(exp.expense_date)}</td>
+                        <td>
+                          <span className="badge badge-navy" style={{ fontSize: '0.7rem' }}>
+                            {exp.payment_method}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {exp.vendor || exp.notes || '-'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#DC2626' }}>
+                          {formatCurrency(exp.amount)}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(exp.id)}
+                            disabled={deletingExpenseId === exp.id}
+                            title="Remove expense"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#EF4444',
+                              cursor: 'pointer',
+                              padding: '0.3rem'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
       {/* Bottom Grid: Payment History & Status Audit Trail */}
@@ -1040,7 +1300,7 @@ export const OrderDetails = () => {
       <Modal
         isOpen={financialModalOpen}
         onClose={() => setFinancialModalOpen(false)}
-        title={`Edit Financials: ${order.order_number}`}
+        title={`Edit Financials & Advance: ${order.order_number}`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setFinancialModalOpen(false)}>
@@ -1059,7 +1319,7 @@ export const OrderDetails = () => {
               <span style={{ fontWeight: 600 }}>{formatCurrency(order.total_amount)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Current Paid:</span>
+              <span style={{ color: 'var(--text-muted)' }}>Advance / Already Paid:</span>
               <span style={{ fontWeight: 600, color: '#059669' }}>{formatCurrency(order.total_paid)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', paddingTop: '0.35rem', marginTop: '0.35rem' }}>
@@ -1087,7 +1347,7 @@ export const OrderDetails = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label required">Already Paid Amount (LKR)</label>
+              <label className="form-label required">Advance / Paid Amount (LKR)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1098,6 +1358,9 @@ export const OrderDetails = () => {
                 placeholder="0.00"
                 required
               />
+              <span className="form-helper">
+                Adjust the advance or already paid amount saved for this order.
+              </span>
             </div>
           </div>
 
@@ -1351,6 +1614,114 @@ export const OrderDetails = () => {
         barcode={order.tracking_number}
         orderNumber={order.order_number}
       />
+
+      {/* Add Order-wise Expense Modal */}
+      <Modal
+        isOpen={expenseModalOpen}
+        onClose={() => setExpenseModalOpen(false)}
+        title={`Add Expense to Order: ${order.order_number}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setExpenseModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="gold" onClick={handleSaveExpense} loading={savingExpense}>
+              Save Order Expense
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveExpense} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          <div style={{ backgroundColor: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: 'var(--radius-md)', padding: '0.65rem 0.85rem' }}>
+            <span style={{ fontSize: '0.78rem', color: '#92400E', fontWeight: 600 }}>
+              💡 This expense will be tied directly to <strong>{order.order_number}</strong> to accurately compute this specific order's net profit.
+            </span>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label required">Expense Description / Item</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="e.g. Belgian Couverture 1.5kg, Custom Box Packaging"
+              value={expTitle}
+              onChange={(e) => setExpTitle(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label required">Cost / Amount (LKR)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                className="form-input"
+                placeholder="Rs. 0.00"
+                value={expAmount}
+                onChange={(e) => setExpAmount(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label required">Category</label>
+              <select
+                className="form-select"
+                value={expCategory}
+                onChange={(e) => setExpCategory(e.target.value)}
+              >
+                <option value="Ingredients & Raw Materials">Ingredients & Raw Materials</option>
+                <option value="Packaging & Foils">Packaging & Foils</option>
+                <option value="Delivery & Logistics">Delivery & Courier</option>
+                <option value="Equipment & Tools">Equipment & Tools</option>
+                <option value="Marketing & Printing">Marketing & Printing</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Vendor / Supplier</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. PrintCraft, BakerySupplies"
+                value={expVendor}
+                onChange={(e) => setExpVendor(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Payment Method</label>
+              <select
+                className="form-select"
+                value={expMethod}
+                onChange={(e) => setExpMethod(e.target.value)}
+              >
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Card">Card</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Additional Notes</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Optional notes or receipt references"
+              value={expNotes}
+              onChange={(e) => setExpNotes(e.target.value)}
+            />
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

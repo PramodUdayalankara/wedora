@@ -301,12 +301,22 @@ export const orderService = {
         .order('updated_at', { ascending: false });
       if (deliveryError) throw deliveryError;
 
+      const { data: orderExpenses, error: expensesError } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('order_id', id)
+        .order('expense_date', { ascending: false });
+      if (expensesError && expensesError.code !== '42703') { // ignore if column not yet applied
+        console.warn('Could not fetch order expenses', expensesError);
+      }
+
       return {
         ...order,
         items: items || [],
         payments: payments || [],
         status_history: statusHistory || [],
-        delivery_history: deliveryHistory || []
+        delivery_history: deliveryHistory || [],
+        expenses: orderExpenses || []
       };
     }
 
@@ -329,13 +339,17 @@ export const orderService = {
     const allDeliveryHistory = getLocalCollection('delivery_history', initialDeliveryHistory);
     const deliveryHistory = allDeliveryHistory.filter(d => d.order_id === id).sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
+    const allExpenses = getLocalCollection('expenses', initialExpenses);
+    const expenses = allExpenses.filter(e => e.order_id === id).sort((a, b) => new Date(b.expense_date || b.created_at) - new Date(a.expense_date || a.created_at));
+
     return {
       ...order,
       customer,
       items,
       payments,
       status_history: statusHistory,
-      delivery_history: deliveryHistory
+      delivery_history: deliveryHistory,
+      expenses
     };
   },
 
@@ -1057,6 +1071,7 @@ export const expenseService = {
 
   async create(expenseData, user = null) {
     const newExpense = {
+      order_id: expenseData.order_id || null,
       title: expenseData.title?.trim(),
       category: expenseData.category || 'Other',
       amount: Number(expenseData.amount) || 0,
@@ -1085,6 +1100,20 @@ export const expenseService = {
     list.unshift(localExpense);
     setLocalCollection('expenses', list);
     return localExpense;
+  },
+
+  async getByOrderId(orderId) {
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('expense_date', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+    const list = getLocalCollection('expenses', initialExpenses);
+    return list.filter(e => e.order_id === orderId).sort((a, b) => new Date(b.expense_date || b.created_at) - new Date(a.expense_date || a.created_at));
   },
 
   async update(id, updates, user = null) {

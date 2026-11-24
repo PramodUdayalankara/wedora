@@ -16,6 +16,7 @@ ALTER TABLE public.business_settings
 
 CREATE TABLE IF NOT EXISTS public.expenses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL,
   expense_number TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Other',
@@ -31,6 +32,10 @@ CREATE TABLE IF NOT EXISTS public.expenses (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.expenses
+  ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES public.orders(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_expenses_order ON public.expenses(order_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON public.expenses(expense_date);
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON public.expenses(category);
 
