@@ -9,7 +9,7 @@ import { Card, CardBody } from '../components/common/Card';
 import { calculateItemSubtotal, calculateOrderTotals, calculateRemainingBalance } from '../utils/calculations';
 import { formatCurrency } from '../utils/formatters';
 import {
-  Plus, Trash2, CreditCard, Calendar, MapPin, Phone, User, Hash, Check
+  Plus, Trash2, CreditCard, Calendar, MapPin, Phone, User, Hash, Check, Truck
 } from 'lucide-react';
 
 const CHOCO_TYPES = [
@@ -32,6 +32,7 @@ export const NewOrder = () => {
   const [location, setLocation] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryCharge, setDeliveryCharge] = useState('');
   const [notes, setNotes] = useState('');
   const [advance, setAdvance] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
@@ -93,7 +94,8 @@ export const NewOrder = () => {
     setItems(u);
   };
 
-  const totals = calculateOrderTotals(items.map(i => ({ quantity: i.qty, unit_price: i.price, subtotal: i.sub })), 0, 0);
+  const delChargeNum = Number(deliveryCharge) || 0;
+  const totals = calculateOrderTotals(items.map(i => ({ quantity: i.qty, unit_price: i.price, subtotal: i.sub })), delChargeNum, 0);
   const advNum = Number(advance) || 0;
   const balance = calculateRemainingBalance(totals.total_amount, advNum);
 
@@ -108,7 +110,7 @@ export const NewOrder = () => {
       const created = await orderService.create(
         { order_number: orderCode, order_name: items.map(i => i.code).join('+'), customer_name: customerName.trim(),
           whatsapp: whatsapp.trim(), location: location.trim(), order_date: orderDate,
-          delivery_date: deliveryDate, additional_charges: 0, discount: 0, notes, status: 'New' },
+          delivery_date: deliveryDate, additional_charges: delChargeNum, discount: 0, notes, status: 'New' },
         items.map(i => ({ product_name: i.name, size: i.size, quantity: i.qty, unit_price: i.price, subtotal: i.sub })),
         advNum > 0 ? { amount: advNum, payment_method: payMethod, payment_reference: '' } : null, user
       );
@@ -136,7 +138,7 @@ export const NewOrder = () => {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '1.5rem', alignItems: 'start' }}>
+        <div className="new-order-layout">
           {/* LEFT: Main Form */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
@@ -188,6 +190,19 @@ export const NewOrder = () => {
                     <label className="form-label" style={{color:'#DC2626', fontWeight:700}}>Delivery Date *</label>
                     <input type="date" className="form-input" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} required style={{borderColor: deliveryDate ? 'var(--border-subtle)' : '#FCA5A5'}} />
                   </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="delivery-charge">Delivery Charge (LKR)</label>
+                  <input
+                    id="delivery-charge"
+                    type="number"
+                    min="0"
+                    step="10"
+                    className="form-input"
+                    placeholder="0.00 (e.g. 350)"
+                    value={deliveryCharge}
+                    onChange={e => setDeliveryCharge(e.target.value)}
+                  />
                 </div>
                 <div className="form-group" style={{marginBottom:0}}>
                   <label className="form-label">Special Notes</label>
@@ -278,7 +293,7 @@ export const NewOrder = () => {
           </div>
 
           {/* RIGHT: Summary Sidebar */}
-          <div style={{ position: 'sticky', top: 'calc(var(--topbar-height) + 1.75rem)' }}>
+          <div className="new-order-summary">
             <div style={{
               background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-lg)', padding: '1.5rem', boxShadow: 'var(--shadow-sm)'
@@ -292,6 +307,14 @@ export const NewOrder = () => {
                   <span style={{ fontWeight: 600 }}>{formatCurrency(item.sub)}</span>
                 </div>
               ))}
+              {delChargeNum > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: '0.65rem', color: 'var(--text-secondary)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Truck size={14} color="var(--gold-600)" /> Delivery Charge
+                  </span>
+                  <span style={{ fontWeight: 600 }}>{formatCurrency(delChargeNum)}</span>
+                </div>
+              )}
 
               <div style={{ borderTop: '1.5px solid var(--navy-900)', marginTop: '0.75rem', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy-900)' }}>
                 <span>Total</span>

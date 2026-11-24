@@ -59,6 +59,28 @@
 }
 
 /* Order Form Layout */
+.new-order-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.new-order-summary {
+  position: sticky;
+  top: calc(var(--topbar-height) + 1.75rem);
+}
+
+@media (max-width: 1024px) {
+  .new-order-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .new-order-summary {
+    position: static;
+  }
+}
+
 .order-form-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;

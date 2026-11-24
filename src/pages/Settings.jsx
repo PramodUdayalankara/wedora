@@ -6,6 +6,7 @@ import { Button } from '../components/common/Button';
 import { Card, CardHeader, CardBody } from '../components/common/Card';
 import { Spinner } from '../components/common/Spinner';
 import { isSupabaseConfigured } from '../services/supabaseClient';
+import { SPECIAL_HANDLING_TEXT } from '../utils/invoiceConstants';
 import { Settings as SettingsIcon, Save, Database } from 'lucide-react';
 
 export const Settings = () => {
@@ -20,7 +21,6 @@ export const Settings = () => {
   const [whatsapp, setWhatsapp] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [invoiceTerms, setInvoiceTerms] = useState('');
   const [bankDetails, setBankDetails] = useState('');
   const [defaultAdvancePercent, setDefaultAdvancePercent] = useState('50');
   const [orderPrefix, setOrderPrefix] = useState('WED-');
@@ -41,7 +41,6 @@ export const Settings = () => {
         setWhatsapp(s.whatsapp || '');
         setEmail(s.email || '');
         setAddress(s.address || '');
-        setInvoiceTerms(s.invoice_terms || '');
         setBankDetails(s.bank_details || '');
         setDefaultAdvancePercent(s.default_advance_percent?.toString() || '50');
         setOrderPrefix(s.order_prefix || 'WED-');
@@ -66,7 +65,6 @@ export const Settings = () => {
         whatsapp,
         email,
         address,
-        invoice_terms: invoiceTerms,
         bank_details: bankDetails,
         default_advance_percent: Number(defaultAdvancePercent) || 50,
         order_prefix: orderPrefix,
@@ -211,14 +209,14 @@ export const Settings = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Invoice Footer / Storage Instructions</label>
+                <label className="form-label">Special Handling &amp; Storage (fixed)</label>
                 <textarea
                   className="form-textarea"
                   rows="4"
-                  value={invoiceTerms}
-                  onChange={(e) => setInvoiceTerms(e.target.value)}
-                  placeholder="e.g. Handcrafted chocolates must be stored at 18-20°C in a cool, dry place away from direct sunlight. Best before 7 days from delivery date."
+                  value={SPECIAL_HANDLING_TEXT}
+                  readOnly
                 />
+                <p className="form-helper">This instruction appears on every invoice.</p>
               </div>
 
               {/* Supabase Connection Status */}

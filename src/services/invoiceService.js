@@ -3,6 +3,42 @@ import 'jspdf-autotable';
 import { formatCurrency, formatPhoneNumber } from '../utils/formatters';
 import { formatDate } from '../utils/dateUtils';
 import { WEDORA_LOGO_BASE64 } from '../assets/logoBase64';
+import { SPECIAL_HANDLING_TEXT } from '../utils/invoiceConstants';
+
+const renderSinhalaText = (text, widthMm) => {
+  const scale = 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(widthMm * 96 / 25.4 * scale);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Unable to render invoice storage instructions');
+
+  const fontSize = 32;
+  context.font = `${fontSize}px "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif`;
+  const lines = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && context.measureText(candidate).width > canvas.width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+
+  const lineHeight = Math.ceil(fontSize * 1.35);
+  canvas.height = Math.max(lineHeight, lines.length * lineHeight);
+  context.font = `${fontSize}px "Noto Sans Sinhala", "Iskoola Pota", "Nirmala UI", sans-serif`;
+  context.fillStyle = '#64748B';
+  context.textBaseline = 'top';
+  lines.forEach((value, index) => context.fillText(value, 0, index * lineHeight));
+
+  return {
+    dataUrl: canvas.toDataURL('image/png'),
+    heightMm: canvas.height * 25.4 / (96 * scale)
+  };
+};
 
 /**
  * Generate luxury branded PDF invoice for Wedora Customized Chocolates
@@ -200,12 +236,8 @@ export const generateInvoicePDF = (order, customer, items = [], payments = [], s
   doc.setTextColor(13, 27, 42);
   doc.text('SPECIAL HANDLING & STORAGE:', 20, finalY + 7);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
-  const termsText = settings?.invoice_terms || 'Handcrafted luxury chocolates must be stored in a dry, cool environment (18-20°C). Do not expose to heat or direct sunlight.';
-  const splitTerms = doc.splitTextToSize(termsText, 90);
-  doc.text(splitTerms, 20, finalY + 14);
+  const handlingText = renderSinhalaText(SPECIAL_HANDLING_TEXT, 90);
+  doc.addImage(handlingText.dataUrl, 'PNG', 20, finalY + 13, 90, handlingText.heightMm);
 
   // Right Totals column
   const totalsX = 135;
